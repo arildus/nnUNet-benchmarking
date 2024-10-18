@@ -1,0 +1,40 @@
+name: nnunet_env
+dependencies:
+  - pip
+  - python=3.10
+  - pip:
+      - numpy
+      - acvl-utils>=0.2
+      - dynamic-network-architectures>=0.2
+      - scikit-learn
+      - torch==2.1.2
+      - torchvision==0.16.2
+      - tqdm
+      - matplotlib
+      - notebook
+      - lightning
+      - wandb
+      - munch
+      - ipykernel
+      - ipywidgets
+      - dynamic-network-architectures>=0.2
+      - mamba-ssm==1.2.0.post1
+      - dicom2nifti
+      - gdown
+      - scikit-image>=0.14
+      - medpy
+      - scipy
+      - batchgenerators>=0.25
+      - SimpleITK>=2.2.1
+      - pandas
+      - graphviz
+      - tifffile
+      - requests
+      - nibabel
+      - seaborn
+      - imagecodecs
+      - yacs
+      - monai==1.3.0
+      - opencv-python
+      
+
