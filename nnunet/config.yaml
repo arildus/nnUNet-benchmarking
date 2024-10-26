@@ -9,3 +9,5 @@ num_iterations_per_epoch: 250
 num_val_iterations_per_epoch: 50
 oversample_foreground_percent: 0.33
 enable_deep_supervision: 'True'
+save_every: 50
+disable_checkpointing: 'False'
