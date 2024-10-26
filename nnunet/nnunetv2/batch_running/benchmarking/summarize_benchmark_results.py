@@ -5,13 +5,14 @@ from nnunetv2.utilities.file_path_utilities import get_output_folder
 
 if __name__ == '__main__':
     trainers = ['nnUNetTrainerBenchmark_5epochs', 'nnUNetTrainerBenchmark_5epochs_noDataLoading']
-    datasets = [2, 3, 4, 5]
+    datasets = [2, 4]
     plans = ['nnUNetPlans']
-    configs = ['2d', '2d_bs3x', '2d_bs6x', '3d_fullres', '3d_fullres_bs3x', '3d_fullres_bs6x']
+    #configs = ['2d', '2d_bs3x', '2d_bs6x', '3d_fullres', '3d_fullres_bs3x', '3d_fullres_bs6x']
+    configs = ['2d', '3d_fullres']
     output_file = join(nnUNet_results, 'benchmark_results.csv')
 
-    torch_version = '2.1.0.dev20230330'#"2.0.0"#"2.1.0.dev20230328"  #"1.11.0a0+gitbc2c6ed"  #
-    cudnn_version = 8700  # 8302  #
+    torch_version = '2.1.2' #'2.1.0.dev20230330'#"2.0.0"#"2.1.0.dev20230328"  #"1.11.0a0+gitbc2c6ed"  #
+    cudnn_version = 8902 #8700  # 8302  #
     num_gpus = 1
 
     unique_gpus = set()
