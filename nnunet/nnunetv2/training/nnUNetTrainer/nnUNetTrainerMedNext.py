@@ -45,7 +45,7 @@ class nnUNetTrainerMedNext(nnUNetTrainerNoDeepSupervision):
         l.backward()
         torch.nn.utils.clip_grad_norm_(self.network.parameters(), 12)
         self.optimizer.step()
-        
+        self.wandb.log({"training_loss_per_it": l.detach().cpu().numpy()})
         return {'loss': l.detach().cpu().numpy()}
     
 
@@ -144,6 +144,23 @@ class nnUNetTrainerV2_MedNeXt_L_kernel5_100epochs(nnUNetTrainerV2_MedNeXt_L_kern
                  device: torch.device = torch.device('cuda')):
         super().__init__(plans, configuration, fold, dataset_json, unpack_dataset, device)
         self.num_epochs = 100
+
+class nnUNetTrainerV2_MedNeXt_S_kernel5(nnUNetTrainerMedNext):
+    """
+    Residual Encoder + UMmaba Bottleneck + Residual Decoder + Skip Connections
+    """
+    @staticmethod
+    def build_network_architecture(plans_manager: PlansManager,
+                                   dataset_json,
+                                   configuration_manager: ConfigurationManager,
+                                   num_input_channels,
+                                   enable_deep_supervision: bool = False) -> nn.Module:
+
+        label_manager = plans_manager.get_label_manager(dataset_json)
+
+        model = create_mednextv1_small(num_input_channels, label_manager.num_segmentation_heads, 5, False)
+
+        return model
 
 class nnUNetTrainerV2_MedNeXt_B_kernel5(nnUNetTrainerMedNext):
     """

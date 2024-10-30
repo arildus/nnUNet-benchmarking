@@ -155,7 +155,7 @@ class nnUNetTrainer(object):
 
         ### checkpoint saving stuff
         self.save_every = yaml_config['save_every']
-        self.disable_checkpointing = yaml_config['disable_checkpointin']
+        self.disable_checkpointing = yaml_config['disable_checkpointing']
 
         # WandbWrapper initialization
         self.wandb = WandbWrapper(use_wandb=yaml_config['wandb_enabled'], config=yaml_config)
@@ -1056,7 +1056,7 @@ class nnUNetTrainer(object):
         self.wandb.log({"epoch": self.current_epoch, "val_loss": val_loss, "training_loss": train_loss, "lr": self.optimizer.param_groups[0]['lr']})
         self.wandb.log({"Average Dice": np.round(dice_val, decimals=4)})
 
-        for label_name, label_idx in self.dataset_json['labels'].items():
+        for label_name, label_idx in self.dataset_json['label_idxs'].items():
             # Skip the 'background' or any label with index 0
             if label_idx == 0:
                 continue

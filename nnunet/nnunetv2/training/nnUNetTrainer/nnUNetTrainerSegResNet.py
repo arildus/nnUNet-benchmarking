@@ -64,7 +64,7 @@ class nnUNetTrainerSegResNet(nnUNetTrainerNoDeepSupervision):
         l.backward()
         torch.nn.utils.clip_grad_norm_(self.network.parameters(), 12)
         self.optimizer.step()
-        
+        self.wandb.log({"training_loss_per_it": l.detach().cpu().numpy()})
         return {'loss': l.detach().cpu().numpy()}
     
 

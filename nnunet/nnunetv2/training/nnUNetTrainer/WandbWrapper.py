@@ -24,11 +24,3 @@ class WandbWrapper():
     def finish(self):
         if self.use_wandb:
             return wandb.finish()
-
-Footer
-© 2024 GitHub, Inc.
-Footer navigation
-
-    Terms
-    Privacy
-    Secu

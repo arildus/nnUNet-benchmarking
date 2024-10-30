@@ -10,6 +10,9 @@ __pycache__/
 content/
 .kaggle/
 
+# Stuff
+wandb
+
 # Distribution / packaging
 .Python
 build/

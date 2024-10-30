@@ -1,13 +1,13 @@
-project_name: BraTs_2023
-dataset: BraTs
+project_name: BraTs_2023_SegResNet
+dataset: BraTs_2023
 wandb_enabled: 1
 
-num_epochs: 1000
+num_epochs: 50
 initial_lr: 0.01
 weight_decay: 0.00003
-num_iterations_per_epoch: 250
+num_iterations_per_epoch: 333
 num_val_iterations_per_epoch: 50
 oversample_foreground_percent: 0.33
-enable_deep_supervision: 'True'
-save_every: 50
-disable_checkpointing: 'False'
+enable_deep_supervision: True
+save_every: 5
+disable_checkpointing: False

@@ -61,7 +61,7 @@ class nnUNetTrainerSAMed(nnUNetTrainerNoDeepSupervision):
         self.grad_scaler.step(self.optimizer)
         self.grad_scaler.update()
 
-
+        self.wandb.log({"training_loss_per_it": l.detach().cpu().numpy()})
         return {'loss': l.detach().cpu().numpy()}
 
     def validation_step(self, batch: dict) -> dict:
