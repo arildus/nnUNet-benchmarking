@@ -25,6 +25,7 @@ export nnUNet_n_proc_DA=64
 export nnUNet_raw=content/data/nnUNet_raw_data_base/
 export nnUNet_preprocessed=content/data/nnUNet_preprocessed/
 export nnUNet_results=content/data/nnUNet_results/
+export nnUNet_visualization=content/data/nnUNet_visualization/
 
 # srun python trainer.py # srun python trainer.py
 srun nnUNetv2_train 137 3d_fullres 0 -tr nnUNetTrainerSegResNet
