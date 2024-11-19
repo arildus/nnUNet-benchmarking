@@ -36,7 +36,8 @@ setup(name='nnunetv2',
           "yacs",
           "monai==1.3.0",
           "opencv-python",
-          "wandb"
+          "wandb",
+          "fvcore"
       ],
       entry_points={
           'console_scripts': [

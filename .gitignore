@@ -10,6 +10,9 @@ __pycache__/
 content/
 .kaggle/
 
+# Configs
+.vscode/
+
 # Stuff
 wandb
 

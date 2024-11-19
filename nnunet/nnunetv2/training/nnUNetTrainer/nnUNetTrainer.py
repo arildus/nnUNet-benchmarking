@@ -10,6 +10,9 @@ from time import time, sleep
 from typing import Union, Tuple, List
 import yaml
 from nnunetv2.training.nnUNetTrainer.WandbWrapper import WandbWrapper
+from fvcore.nn import FlopCountAnalysis
+from timeit import default_timer as timer
+from tqdm import tqdm
 
 import numpy as np
 import torch
@@ -1053,8 +1056,7 @@ class nnUNetTrainer(object):
         self.print_to_log_file('val_loss', np.round(self.logger.my_fantastic_logging['val_losses'][-1], decimals=4))
         self.print_to_log_file('Pseudo dice', all_dice)
 
-        self.wandb.log({"epoch": self.current_epoch, "val_loss": val_loss, "training_loss": train_loss, "lr": self.optimizer.param_groups[0]['lr']})
-        self.wandb.log({"Average Dice": np.round(dice_val, decimals=4)})
+        dice_score_dict = {}
 
         for label_name, label_idx in self.dataset_json['label_idxs'].items():
             # Skip the 'background' or any label with index 0
@@ -1064,7 +1066,22 @@ class nnUNetTrainer(object):
             all_dice_idx = label_idx - 1
             if 0 <= all_dice_idx < len(all_dice):
                 dice_score = np.round(all_dice[all_dice_idx], decimals=4)
-                self.wandb.log({f"{label_name} Dice": dice_score})
+                dice_score_dict[f"{label_name} Dice"] = dice_score
+
+        # handle 'best' checkpointing. ema_fg_dice is computed by the logger and can be accessed like this
+        if self._best_ema is None or self.logger.my_fantastic_logging['ema_fg_dice'][-1] > self._best_ema:
+            self._best_ema = self.logger.my_fantastic_logging['ema_fg_dice'][-1]
+            self.print_to_log_file(f"Yayy! New best EMA pseudo Dice: {np.round(self._best_ema, decimals=4)}")
+            self.save_checkpoint(join(self.output_folder, 'checkpoint_best.pth'))
+
+            dice_score_dict["Best EMA pseudo Dice"] = np.round(self._best_ema, decimals=4)
+
+        self.wandb.log({"epoch": self.current_epoch, 
+                        "val_loss": val_loss, 
+                        "training_loss": train_loss, 
+                        "lr": self.optimizer.param_groups[0]['lr'],
+                        "Average Dice": np.round(dice_val, decimals=4),
+                        **dice_score_dict})
 
         self.print_to_log_file(
             f"Epoch time: {np.round(self.logger.my_fantastic_logging['epoch_end_timestamps'][-1] - self.logger.my_fantastic_logging['epoch_start_timestamps'][-1], decimals=2)} s")
@@ -1073,14 +1090,6 @@ class nnUNetTrainer(object):
         current_epoch = self.current_epoch
         if (current_epoch + 1) % self.save_every == 0 and current_epoch != (self.num_epochs - 1):
             self.save_checkpoint(join(self.output_folder, 'checkpoint_latest.pth'))
-
-        # handle 'best' checkpointing. ema_fg_dice is computed by the logger and can be accessed like this
-        if self._best_ema is None or self.logger.my_fantastic_logging['ema_fg_dice'][-1] > self._best_ema:
-            self._best_ema = self.logger.my_fantastic_logging['ema_fg_dice'][-1]
-            self.print_to_log_file(f"Yayy! New best EMA pseudo Dice: {np.round(self._best_ema, decimals=4)}")
-            self.save_checkpoint(join(self.output_folder, 'checkpoint_best.pth'))
-
-            self.wandb.log({"Best EMA pseudo Dice": np.round(self._best_ema, decimals=4)})
 
         if self.local_rank == 0:
             self.logger.plot_progress_png(self.output_folder)
@@ -1175,6 +1184,49 @@ class nnUNetTrainer(object):
             dataset_val = nnUNetDataset(self.preprocessed_dataset_folder, val_keys,
                                         folder_with_segs_from_previous_stage=self.folder_with_segs_from_previous_stage,
                                         num_images_properties_loading_threshold=0)
+
+            img = torch.ones([1, 4, 128, 128, 128]).to(self.device)
+            flops = FlopCountAnalysis(self.network, img)
+            num_iter = 10
+            latency = []
+            fps = []
+
+            img = img[0]
+            with torch.no_grad():
+                for i in tqdm(range(num_iter)):
+                    start = timer()
+                    try:
+                        prediction = predictor.predict_sliding_window_return_logits(img)
+                    except RuntimeError:
+                        predictor.perform_everything_on_device = False
+                        prediction = predictor.predict_sliding_window_return_logits(img)
+                        predictor.perform_everything_on_device = True
+                    end = timer()
+                    latency_i = end-start
+                    latency.append(latency_i)
+                    fps_i = 1 / latency_i
+                    fps.append(fps_i)
+            
+            meanLatency = np.mean(np.array(latency))*1000
+            stdLatency = np.std(np.array(latency))*1000
+
+            meanFPS = np.mean(np.array(fps))
+            stdFPS = np.std(np.array(fps))
+
+
+            total_params = sum(
+                param.numel() for param in self.network.parameters()
+            )
+
+            trainable_params = sum(
+                p.numel() for p in self.network.parameters() if p.requires_grad
+            )
+
+            self.print_to_log_file(f"Total number of FLOPs: {flops.total()}", also_print_to_console=True, add_timestamp=False)
+            self.print_to_log_file(f"Total number of parameters in the model: {total_params}", also_print_to_console=True, add_timestamp=False)
+            self.print_to_log_file(f"Total number of trainable parameters in the model: {trainable_params}", also_print_to_console=True, add_timestamp=False)
+            self.print_to_log_file(f"Mean Latency: {meanLatency}", also_print_to_console=True, add_timestamp=False)
+            self.print_to_log_file(f"Mean FPS: {meanFPS}", also_print_to_console=True, add_timestamp=False)
 
             next_stages = self.configuration_manager.next_stage_names
 

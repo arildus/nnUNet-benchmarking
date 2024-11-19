@@ -45,6 +45,7 @@ base = join(os.sep.join(__file__.split(os.sep)[:-3]), 'data')
 nnUNet_raw = os.environ.get('nnUNet_raw')
 nnUNet_preprocessed = os.environ.get('nnUNet_preprocessed')
 nnUNet_results = os.environ.get('nnUNet_results')
+nnUNet_visualization = os.environ.get('nnUNet_visualization')
 
 if nnUNet_raw is None:
     print("nnUNet_raw is not defined and nnU-Net can only be used on data for which preprocessed files "
@@ -60,4 +61,9 @@ if nnUNet_preprocessed is None:
 if nnUNet_results is None:
     print("nnUNet_results is not defined and nnU-Net cannot be used for training or "
           "inference. If this is not intended behavior, please read documentation/setting_up_paths.md for information "
+          "on how to set this up.")
+
+if nnUNet_visualization is None:
+    print("nnUNet_visualization is not defined and nnU-Net cannot be used for visualizing after training. "
+          "If this is not intended behavior, please read documentation/setting_up_paths.md for information "
           "on how to set this up.")
