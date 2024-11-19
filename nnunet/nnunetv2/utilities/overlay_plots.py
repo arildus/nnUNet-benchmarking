@@ -17,11 +17,12 @@ from typing import Tuple, Union
 
 import numpy as np
 import pandas as pd
+import nibabel as nib
 from batchgenerators.utilities.file_and_folder_operations import *
 from nnunetv2.configuration import default_num_processes
 from nnunetv2.imageio.base_reader_writer import BaseReaderWriter
 from nnunetv2.imageio.reader_writer_registry import determine_reader_writer_from_dataset_json
-from nnunetv2.paths import nnUNet_raw, nnUNet_preprocessed
+from nnunetv2.paths import nnUNet_raw, nnUNet_preprocessed, nnUNet_results, nnUNet_visualization
 from nnunetv2.utilities.dataset_name_id_conversion import maybe_convert_to_dataset_name
 from nnunetv2.utilities.utils import get_identifiers_from_splitted_dataset_folder, \
     get_filenames_of_train_images_and_targets
@@ -135,6 +136,8 @@ def plot_overlay(image_file: str, segmentation_file: str, image_reader_writer: B
     image = image[0]
     seg, props_seg = image_reader_writer.read_seg(segmentation_file)
     seg = seg[0]
+    #print("raw image shape: ", image.shape)
+    #print("ground truth data shape: ", seg.shape)
 
     assert image.shape == seg.shape, "image and seg do not have the same shape: %s, %s" % (
         image_file, segmentation_file)
@@ -145,6 +148,53 @@ def plot_overlay(image_file: str, segmentation_file: str, image_reader_writer: B
     # print(image.shape, selected_slice)
 
     overlay = generate_overlay(image[selected_slice], seg[selected_slice], overlay_intensity=overlay_intensity)
+
+
+    image_dir = os.path.dirname(output_file)
+    print(image_dir)
+    maybe_mkdir_p(image_dir)
+
+    #print(image_file)
+    #print(segmentation_file)
+    #print(output_file)
+    
+    plt.imsave(output_file, overlay)
+
+    return selected_slice
+
+
+def plot_overlay_prediction(image_file: str, segmentation_file: str, gt_segmentation_file: str, image_reader_writer: BaseReaderWriter, output_file: str, slice: int, overlay_intensity: float = 0.6):
+    import matplotlib.pyplot as plt
+
+    image, props = image_reader_writer.read_images((image_file, ))
+    image = image[0]
+    seg, props_seg = image_reader_writer.read_seg(segmentation_file)
+    seg = seg[0]
+    gt_seg, props_seg = image_reader_writer.read_seg(gt_segmentation_file)
+    gt_seg = gt_seg[0]
+    #print("raw image shape: ", image.shape)
+    #print("pred data shape: ", seg.shape)
+
+    assert image.shape == seg.shape, "image and seg do not have the same shape: %s, %s" % (
+        image_file, segmentation_file)
+
+    assert image.ndim == 3, 'only 3D images/segs are supported'
+
+    selected_slice = select_slice_to_plot2(image, gt_seg)
+    #print("raw image shape: ", image.shape)
+    #print("gt_seg data shape: ", seg.shape)
+    #print("image file path: ", image_file)
+    #print("gt_seg path: ", gt_segmentation_file)
+
+    # print(image.shape, selected_slice)
+
+    overlay = generate_overlay(image[selected_slice], seg[selected_slice], overlay_intensity=overlay_intensity)
+
+    maybe_mkdir_p(os.path.dirname(output_file))
+
+    #print(image_file)
+    #print(segmentation_file)
+    #print(output_file)
 
     plt.imsave(output_file, overlay)
 
@@ -186,25 +236,124 @@ def multiprocessing_plot_overlay_preprocessed(list_of_case_files, list_of_output
         ))
         r.get()
 
+def multiprocessing_plot_overlay_prediction(list_of_case_files, list_of_pred_files, list_of_gt_segmentation_files, image_reader_writer, 
+                                            list_of_output_files, overlay_intensity,
+                                              num_processes=8):
+    with multiprocessing.get_context("spawn").Pool(num_processes) as p:
+        r = p.starmap_async(plot_overlay_prediction, zip(
+            list_of_case_files, list_of_pred_files, list_of_gt_segmentation_files, [image_reader_writer] * len(list_of_output_files), 
+            list_of_output_files, [overlay_intensity] * len(list_of_output_files)
+        ))
+        r.get()
+
 
 def generate_overlays_from_raw(dataset_name_or_id: Union[int, str], output_folder: str,
+                               case: str, fold: int,
                                num_processes: int = 8, channel_idx: int = 0, overlay_intensity: float = 0.6):
     dataset_name = maybe_convert_to_dataset_name(dataset_name_or_id)
     folder = join(nnUNet_raw, dataset_name)
     dataset_json = load_json(join(folder, 'dataset.json'))
     dataset = get_filenames_of_train_images_and_targets(folder, dataset_json)
 
-    image_files = [v['images'][channel_idx] for v in dataset.values()]
-    seg_files = [v['label'] for v in dataset.values()]
+    if output_folder is None:
+        output_folder = join(nnUNet_visualization, dataset_name)
+
+    network_output_files_dict = {}
+    network_prediction_files_dict = {}
+    network_gt_files_dict = {}
+    network_image_files_dict = {}
+    identifiers = []
+
+    image_files = []
+    seg_files = []
+    
+    if fold is not None:
+
+        results_dataset_folder_base = os.path.join(nnUNet_results, dataset_name) 
+        trainer_result_folders = os.listdir(results_dataset_folder_base)
+
+        for trainer in trainer_result_folders:
+            fold_folder_base = os.path.join(results_dataset_folder_base, trainer, f'fold_{fold}')
+
+            if not os.path.exists(fold_folder_base):
+                print(f"Could not find folder '{fold_folder_base}'. Not able to visualize results.")
+            else:
+                debug_file_path = os.path.join(fold_folder_base, 'debug.json')
+                #print(debug_file_path)
+
+                if os.path.isfile(debug_file_path):
+                    f = open(debug_file_path, "r")
+                    data = json.load(f)
+                    network_name = data['network']
+                    #print('Network: ', network_name)
+                else:
+                    print(f"Could not find file '{debug_file_path}'. Network name could not be extracted. Trainer name used.")
+                    network_name = str.join(trainer.split('_')[:-5])
+                
+                validation_folder_base = os.path.join(fold_folder_base, 'validation')
+
+                if not os.path.exists(validation_folder_base):
+                    print(f"Could not locate folder '{validation_folder_base}'. Make sure to run trainer with --val option to generate validation samples.")
+
+                network_identifiers = []
+                if case is not None:
+                    if not os.path.isfile(join(validation_folder_base, case + '.nii.gz')):
+                        #print(join(validation_folder_base, case + '.nii.gz'))
+                        print(f"Could not locate case '{case}' for fold {fold} for network '{network_name}'.")
+                    else:
+                        network_identifiers = [case]
+                else:
+                    network_identifiers = [i[:-7] for i in subfiles(validation_folder_base, suffix='.gz', join=False)]
+
+                network_output_files_dict[network_name] = [join(output_folder, i, i + '_' + network_name +'.png') for i in network_identifiers]
+                network_prediction_files_dict[network_name] = [join(validation_folder_base, i + '.nii.gz') for i in network_identifiers]
+                network_gt_files_dict[network_name] = [dataset[i]['label'] for i in network_identifiers]
+                network_image_files_dict[network_name] = [dataset[i]['images'][channel_idx] for i in network_identifiers]
+
+                identifiers.extend(network_identifiers)
+        
+        identifiers = list(set(identifiers))
+        image_files = [dataset[i]['images'][channel_idx] for i in identifiers]
+        seg_files = [dataset[i]['label'] for i in identifiers]
+
+    elif case is None:
+        image_files = [v['images'][channel_idx] for v in dataset.values()] # 'content/data/nnUNet_raw_data_base/Dataset137_BraTS2021/imagesTr/BraTS2021_00599_0000.nii.gz'
+        seg_files = [v['label'] for v in dataset.values()]                 # 'content/data/nnUNet_raw_data_base/Dataset137_BraTS2021/labelsTr/BraTS2021_00599.nii.gz'
+    else:
+        if case not in dataset.keys():
+            #print(join(preprocessed_folder, case + '.npz'))
+            print(f"Could not locate case '{case}' in raw_data_base folder.")
+        else:
+            image_files = [dataset[case]['images'][channel_idx]]
+            seg_files = [dataset[case]['label']]
+    
+
+
+    #print("image_files: ", image_files)
+    #print("seg_files: ", seg_files)
+    #print("identifiers: ", identifiers)
 
     assert all([isfile(i) for i in image_files])
     assert all([isfile(i) for i in seg_files])
 
-    maybe_mkdir_p(output_folder)
-    output_files = [join(output_folder, i + '.png') for i in dataset.keys()]
+    gt_output_files = [join(output_folder, i, i + '_gt.png') for i in identifiers]
+    #print("gt_ouput_files: ", gt_output_files)
 
     image_reader_writer = determine_reader_writer_from_dataset_json(dataset_json, image_files[0])()
-    multiprocessing_plot_overlay(image_files, seg_files, image_reader_writer, output_files, overlay_intensity, num_processes)
+    multiprocessing_plot_overlay(image_files, seg_files, image_reader_writer, gt_output_files, overlay_intensity, num_processes)
+    
+
+    if fold is not None:
+        for network, output_files in network_output_files_dict.items():
+            print("Network: ", network)
+            #print(output_files)
+            list_of_prediction_files = network_prediction_files_dict[network]
+            list_of_gt_segmentation_files = network_gt_files_dict[network]
+            list_of_image_files = network_image_files_dict[network]
+            #print(list_of_prediction_files)
+            multiprocessing_plot_overlay_prediction(list_of_image_files, list_of_prediction_files, list_of_gt_segmentation_files, image_reader_writer, 
+                                                    output_files, overlay_intensity=overlay_intensity, 
+                                                    num_processes=num_processes)
 
 
 def generate_overlays_from_preprocessed(dataset_name_or_id: Union[int, str], output_folder: str,
@@ -214,6 +363,10 @@ def generate_overlays_from_preprocessed(dataset_name_or_id: Union[int, str], out
                                         overlay_intensity: float = 0.6):
     dataset_name = maybe_convert_to_dataset_name(dataset_name_or_id)
     folder = join(nnUNet_preprocessed, dataset_name)
+
+    if output_folder is None:
+        output_folder = join(nnUNet_visualization, dataset_name)
+
     if not isdir(folder): raise RuntimeError("run preprocessing for that task first")
 
     plans = load_json(join(folder, plans_identifier + '.json'))
@@ -245,7 +398,9 @@ def entry_point_generate_overlay():
     parser = argparse.ArgumentParser("Plots png overlays of the slice with the most foreground. Note that this "
                                      "disregards spacing information!")
     parser.add_argument('-d', type=str, help="Dataset name or id", required=True)
-    parser.add_argument('-o', type=str, help="output folder", required=True)
+    parser.add_argument('-o', type=str, default=None, help="output folder", required=False)
+    parser.add_argument('-case', type=str, default=None, help="Case to overlay", required=False)
+    parser.add_argument('-val_fold', type=int, default=None, help="If you want to overlay predictions of a certain fold.  Should be an int between 0 and 4.", required=False)
     parser.add_argument('-np', type=int, default=default_num_processes, required=False,
                         help=f"number of processes used. Default: {default_num_processes}")
     parser.add_argument('-channel_idx', type=int, default=0, required=False,
@@ -264,7 +419,7 @@ def entry_point_generate_overlay():
     args = parser.parse_args()
 
     if args.use_raw:
-        generate_overlays_from_raw(args.d, args.o, args.np, args.channel_idx,
+        generate_overlays_from_raw(args.d, args.o, args.case, args.val_fold, args.np, args.channel_idx,
                                    overlay_intensity=args.overlay_intensity)
     else:
         generate_overlays_from_preprocessed(args.d, args.o, args.np, args.channel_idx, args.c, args.p,
